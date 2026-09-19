@@ -1,54 +1,28 @@
 from pathlib import Path
 from dotenv import load_dotenv
 
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from rag.retriever import retrieve_documents
 
-# --------------------------------------------------
+
+# ==================================================
 # PATHS
-# --------------------------------------------------
+# ==================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-VECTORSTORE_PATH = (
-    BASE_DIR
-    / "vectorstore"
-    / "tcs_faiss"
-)
 
-
-# --------------------------------------------------
+# ==================================================
 # LOAD ENVIRONMENT VARIABLES
-# --------------------------------------------------
+# ==================================================
 
 load_dotenv(BASE_DIR / ".env")
 
 
-# --------------------------------------------------
-# EMBEDDINGS
-# --------------------------------------------------
-
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-
-
-# --------------------------------------------------
-# LOAD FAISS VECTOR DATABASE
-# --------------------------------------------------
-
-vectorstore = FAISS.load_local(
-    str(VECTORSTORE_PATH),
-    embeddings,
-    allow_dangerous_deserialization=True
-)
-
-
-# --------------------------------------------------
+# ==================================================
 # GEMINI
-# --------------------------------------------------
+# ==================================================
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
@@ -56,48 +30,66 @@ llm = ChatGoogleGenerativeAI(
 )
 
 
-# --------------------------------------------------
-# RETRIEVAL SETTINGS
-# --------------------------------------------------
-
-TOP_K = 4
-
-RELEVANCE_THRESHOLD = 0.35
-
-
-
-# --------------------------------------------------
+# ==================================================
 # RETRIEVE RELEVANT DOCUMENTS
-# --------------------------------------------------
+# ==================================================
 
-def retrieve_documents(question: str):
+def get_relevant_documents(
+    question: str,
+    company: str | None = None
+):
+    """
+    Retrieve relevant documents from the
+    multi-company placement knowledge base.
 
-    results = vectorstore.similarity_search_with_relevance_scores(
-        question,
-        k=TOP_K
+    Parameters
+    ----------
+    question : str
+        User's question.
+
+    company : str | None
+        Optional company filter.
+
+    Returns
+    -------
+    list
+        List containing:
+        {
+            "document": Document,
+            "score": float
+        }
+    """
+
+    results = retrieve_documents(
+        question=question,
+        company=company
     )
 
     relevant_docs = []
 
     for doc, score in results:
 
-        if score >= RELEVANCE_THRESHOLD:
-
-            relevant_docs.append(
-                {
-                    "document": doc,
-                    "score": score
-                }
-            )
+        relevant_docs.append(
+            {
+                "document": doc,
+                "score": score
+            }
+        )
 
     return relevant_docs
 
 
-# --------------------------------------------------
-# CREATE CONTEXT
-# --------------------------------------------------
+# ==================================================
+# CREATE RAG CONTEXT
+# ==================================================
 
-def build_context(relevant_docs):
+def build_context(
+    relevant_docs
+):
+    """
+    Convert retrieved documents into
+    a context string for Gemini.
+    """
 
     if not relevant_docs:
         return ""
@@ -112,4 +104,151 @@ def build_context(relevant_docs):
             doc.page_content
         )
 
-    return "\n\n".join(context_parts)
+    return "\n\n".join(
+        context_parts
+    )
+
+
+# ==================================================
+# BUILD SOURCE INFORMATION
+# ==================================================
+
+def get_sources(
+    relevant_docs
+):
+    """
+    Extract source information from
+    retrieved documents.
+    """
+
+    sources = []
+
+    for item in relevant_docs:
+
+        doc = item["document"]
+        score = item["score"]
+
+        sources.append(
+            {
+                "company": doc.metadata.get(
+                    "company",
+                    "Unknown"
+                ),
+                "source_file": doc.metadata.get(
+                    "source_file",
+                    "Unknown"
+                ),
+                "source_path": doc.metadata.get(
+                    "source_path",
+                    "Unknown"
+                ),
+                "page": doc.metadata.get(
+                    "page",
+                    "Unknown"
+                ),
+                "score": score
+            }
+        )
+
+    return sources
+
+
+# ==================================================
+# TEST RAG RETRIEVAL
+# ==================================================
+
+if __name__ == "__main__":
+
+    print("\n" + "=" * 60)
+    print("🚀 PLACEMENT AI CO-PILOT — RAG CHAIN TEST")
+    print("=" * 60)
+
+    question = input(
+        "\n🔎 Ask a question: "
+    )
+
+    company = input(
+        "🏢 Company filter "
+        "(optional, e.g. tcs): "
+    ).strip()
+
+    if company == "":
+        company = None
+
+    # ------------------------------------------------
+    # RETRIEVE
+    # ------------------------------------------------
+
+    relevant_docs = get_relevant_documents(
+        question,
+        company
+    )
+
+    # ------------------------------------------------
+    # CONTEXT
+    # ------------------------------------------------
+
+    context = build_context(
+        relevant_docs
+    )
+
+    # ------------------------------------------------
+    # DISPLAY
+    # ------------------------------------------------
+
+    print("\n" + "=" * 60)
+    print("📚 RETRIEVED CONTEXT")
+    print("=" * 60)
+
+    if not context:
+
+        print(
+            "\n❌ No relevant context found."
+        )
+
+    else:
+
+        print(context)
+
+    # ------------------------------------------------
+    # SOURCES
+    # ------------------------------------------------
+
+    print("\n" + "=" * 60)
+    print("📌 SOURCES")
+    print("=" * 60)
+
+    sources = get_sources(
+        relevant_docs
+    )
+
+    if not sources:
+
+        print("\n❌ No sources found.")
+
+    else:
+
+        for i, source in enumerate(
+            sources,
+            start=1
+        ):
+
+            print(
+                f"\nSource {i}"
+            )
+
+            print(
+                f"Company : {source['company']}"
+            )
+
+            print(
+                f"File    : {source['source_file']}"
+            )
+
+            print(
+                f"Page    : {source['page']}"
+            )
+
+            print(
+                f"Score   : {source['score']:.4f}"
+            )

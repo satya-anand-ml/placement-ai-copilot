@@ -8,7 +8,7 @@ from langchain_core.messages import (
 )
 
 from rag.rag_chain import (
-    retrieve_documents,
+    get_relevant_documents,
     build_context,
     llm
 )
@@ -65,37 +65,45 @@ Give clear, practical and beginner-friendly answers.
 
 RAG RULES:
 
-The current knowledge base contains information from the
-TCS All India NQT 2026 reference document.
+The knowledge base contains company-specific placement
+reference documents.
 
-Follow these rules strictly:
+1. For company-specific questions, use the provided
+   Knowledge Base Context when relevant information is available.
 
-1. If the user's question is about TCS or information covered
-   by the knowledge base, use the provided Knowledge Base
-   Context.
+2. Never use information from one company to answer a question
+   about another company.
 
-2. Never use TCS information to answer questions about another
-   company such as Infosys, Accenture, Wipro, Cognizant,
-   Capgemini, etc.
+3. If a company-specific question is asked but the required
+   information is not present in the Knowledge Base Context,
+   say:
 
-3. If the user asks about a company or topic that is not covered
-   by the Knowledge Base Context, do not invent or provide
-   unsupported company-specific information.
+   "I couldn't find this information in the provided
+   knowledge base."
 
-4. For unsupported knowledge-base questions, say:
-   "I couldn't find this information in the provided knowledge base."
+4. Do not invent company-specific information.
 
-5. Do not use general knowledge to fill a missing company-specific
-   answer.
+5. Do not use general knowledge to fill a missing
+   company-specific answer.
 
-6. For completely general questions such as DSA, programming,
-   interview concepts, or computer science topics, you may answer
-   normally using your general knowledge.
+6. For completely general questions such as:
+   - DSA
+   - Programming
+   - Binary Search
+   - Dynamic Programming
+   - OOP
+   - DBMS
+   - OS
+   - Computer Science concepts
 
-7. Never claim that information came from the knowledge base
-   unless it is actually present in the provided context.
+   answer normally using your general knowledge.
+
+7. For general questions, do not claim that the answer
+   came from the knowledge base.
+
+8. Use retrieved company information only when it is actually
+   present in the Knowledge Base Context.
 """
-
 
 
 # --------------------------------------------------
@@ -227,7 +235,6 @@ if user_input:
 
         st.markdown(user_input)
 
-
     st.session_state.messages.append(
         {
             "role": "user",
@@ -237,12 +244,60 @@ if user_input:
 
 
     # ----------------------------------------------
+    # COMPANY DETECTION
+    # ----------------------------------------------
+
+    company = None
+
+    company_keywords = {
+        "tcs": "tcs",
+        "infosys": "infosys",
+        "accenture": "accenture",
+        "capgemini": "capgemini",
+        "cognizant": "cognizant",
+        "wipro": "wipro",
+        "deloitte": "deloitte",
+        "hcl": "hcltech",
+        "hcltech": "hcltech",
+        "ltimindtree": "ltimindtree",
+        "tech mahindra": "techmahindra",
+        "techmahindra": "techmahindra"
+    }
+
+    user_input_lower = user_input.lower()
+
+    for keyword, company_name in company_keywords.items():
+
+        if keyword in user_input_lower:
+
+            company = company_name
+            break
+
+
+    # ----------------------------------------------
     # RETRIEVE DOCUMENTS
     # ----------------------------------------------
 
-    relevant_docs = retrieve_documents(
-        user_input
-    )
+    # IMPORTANT:
+    # RAG is used ONLY for company-specific questions.
+    #
+    # General questions like:
+    # "What is Binary Search?"
+    # "Explain OOP"
+    # "What is DP?"
+    #
+    # will NOT search the company knowledge base.
+
+    if company:
+
+        relevant_docs = get_relevant_documents(
+            question=user_input,
+            company=company
+        )
+
+    else:
+
+        relevant_docs = []
 
 
     # ----------------------------------------------
@@ -271,8 +326,9 @@ if user_input:
                     context
                     if context
                     else
-                    "No relevant information was found "
-                    "in the knowledge base."
+                    "No relevant company-specific "
+                    "information was found in the "
+                    "knowledge base."
                 )
             )
         )
@@ -319,7 +375,12 @@ if user_input:
 
     with st.chat_message("assistant"):
 
-        with st.spinner("🔎 Searching knowledge base..."):
+        with st.spinner(
+            "🔎 Searching knowledge base..."
+            if company
+            else
+            "🤖 Thinking..."
+        ):
 
             # --------------------------------------
             # STREAMING RESPONSE
@@ -360,6 +421,11 @@ if user_input:
 
                     score = item["score"]
 
+                    company_name = doc.metadata.get(
+                        "company",
+                        "Unknown"
+                    )
+
                     source = doc.metadata.get(
                         "source",
                         "Unknown source"
@@ -381,11 +447,13 @@ if user_input:
                         f"""
 **Source {index}**
 
+🏢 **Company:** `{company_name}`
+
 📄 **Document:** `{source_name}`
 
 📑 **Page:** `{page}`
 
-🎯 **Relevance:** `{score:.2f}`
+🎯 **Similarity:** `{score:.2f}`
 """
                     )
 
