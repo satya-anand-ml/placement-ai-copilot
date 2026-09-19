@@ -21,3 +21,5 @@ env/
 Thumbs.db
 # RAG vector database
 vectorstore/
+
+database/*.db
