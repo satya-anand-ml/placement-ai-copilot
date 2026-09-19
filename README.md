@@ -1,64 +1,49 @@
 # 🤖 Placement AI Co-Pilot
 
-> An evolving GenAI-powered assistant designed to help students with placement preparation, DSA, technical interviews, resumes, and career guidance.
+An AI-powered placement preparation assistant built using **Python, Streamlit, LangChain, Google Gemini, and RAG**.
 
-## 📌 Project Overview
-
-Placement AI Co-Pilot is a GenAI-based student placement assistant that is being developed incrementally.
-
-The project will evolve from a simple conversational AI chatbot into an advanced **Agentic AI system** with:
-
-- Retrieval-Augmented Generation (RAG)
-- LangGraph workflows
-- Multi-Agent architecture
-- Tool calling
-- Human-in-the-Loop (HITL)
-- MCP integrations
-- Persistent memory
-- External services and APIs
-
-The project is being developed **phase by phase**, with each phase introducing a new capability.
+The project is being developed step-by-step to evolve from a basic AI chatbot into an **Agentic AI-powered Placement Co-Pilot**.
 
 ---
 
-# 🚀 Current Status
+## 🚀 Features
 
-### Phase 1 — Basic GenAI Chatbot ✅
-
-The current version provides a basic conversational AI assistant powered by **Google Gemini**.
-
-### Current Features
-
-- 🤖 Gemini-powered AI chatbot
-- 💬 Interactive Streamlit chat interface
-- 🧠 Conversation memory within the current session
+### Phase 1 — AI Chatbot
+- 🤖 Google Gemini 2.5 Flash
+- 💬 Streamlit chat interface
+- 🧠 Conversation memory
 - ➕ New Chat functionality
-- 🔐 Environment-variable based API key management
-- 💻 Simple and extensible project structure
+
+### Phase 2 — RAG
+- 📄 PDF document ingestion
+- ✂️ Text chunking
+- 🧠 HuggingFace embeddings
+- 🗄️ FAISS vector database
+- 🔎 Similarity-based retrieval
+- 🎯 Relevance filtering
+- 📚 Source document & page information
+- ⚡ Streaming AI responses
+- 🛡️ Knowledge-base based answers
 
 ---
 
-# 🏗️ Current Architecture
+## 🧠 RAG Pipeline
 
 ```text
-                 User
-                   │
-                   ▼
-          ┌─────────────────┐
-          │ Streamlit Chat UI│
-          └────────┬────────┘
-                   │
-                   ▼
-          ┌─────────────────┐
-          │ Conversation    │
-          │ Memory          │
-          └────────┬────────┘
-                   │
-                   ▼
-          ┌─────────────────┐
-          │ Google Gemini   │
-          │ LLM             │
-          └────────┬────────┘
-                   │
-                   ▼
-              AI Response
+PDF Document
+     ↓
+PDF Loader
+     ↓
+Text Splitting
+     ↓
+HuggingFace Embeddings
+     ↓
+FAISS Vector Database
+     ↓
+Similarity Retrieval
+     ↓
+Relevant Context
+     ↓
+Google Gemini 2.5 Flash
+     ↓
+Streaming Response
