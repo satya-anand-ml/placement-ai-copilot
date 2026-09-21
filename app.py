@@ -1,29 +1,22 @@
 import streamlit as st
-from dotenv import load_dotenv
 
-from langchain_core.messages import (
-    HumanMessage,
-    AIMessage,
-    SystemMessage
+from langchain_core.messages import HumanMessage
+
+from langgraph.placement_graph import graph
+
+from chat_db import (
+    init_db,
+    create_chat,
+    save_message,
+    get_chats,
+    get_chat_messages,
+    delete_chat
 )
 
-from rag.rag_chain import (
-    get_relevant_documents,
-    build_context,
-    llm
-)
 
-
-# --------------------------------------------------
-# LOAD ENVIRONMENT VARIABLES
-# --------------------------------------------------
-
-load_dotenv()
-
-
-# --------------------------------------------------
+# ============================================================
 # PAGE CONFIG
-# --------------------------------------------------
+# ============================================================
 
 st.set_page_config(
     page_title="Placement AI Co-Pilot",
@@ -32,112 +25,82 @@ st.set_page_config(
 )
 
 
-# --------------------------------------------------
-# SYSTEM PROMPT
-# --------------------------------------------------
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
 
-SYSTEM_PROMPT = """
-You are Placement AI Co-Pilot, a helpful AI assistant.
-
-Your main purpose is to help students with:
-- DSA
-- Programming
-- Technical interviews
-- Placement preparation
-- Resume preparation
-- Career guidance
-- Computer Science subjects
-
-You have access to the conversation history.
-
-Use previous messages when they are relevant to the user's
-current question.
-
-If the user tells you their name or useful information during
-the conversation, remember it and use it naturally in later
-responses.
-
-Do not claim to remember information that is not present in
-the conversation history.
-
-Give clear, practical and beginner-friendly answers.
+init_db()
 
 
-RAG RULES:
-
-The knowledge base contains company-specific placement
-reference documents.
-
-1. For company-specific questions, use the provided
-   Knowledge Base Context when relevant information is available.
-
-2. Never use information from one company to answer a question
-   about another company.
-
-3. If a company-specific question is asked but the required
-   information is not present in the Knowledge Base Context,
-   say:
-
-   "I couldn't find this information in the provided
-   knowledge base."
-
-4. Do not invent company-specific information.
-
-5. Do not use general knowledge to fill a missing
-   company-specific answer.
-
-6. For completely general questions such as:
-   - DSA
-   - Programming
-   - Binary Search
-   - Dynamic Programming
-   - OOP
-   - DBMS
-   - OS
-   - Computer Science concepts
-
-   answer normally using your general knowledge.
-
-7. For general questions, do not claim that the answer
-   came from the knowledge base.
-
-8. Use retrieved company information only when it is actually
-   present in the Knowledge Base Context.
-"""
-
-
-# --------------------------------------------------
+# ============================================================
 # SESSION STATE
-# --------------------------------------------------
+# ============================================================
+
+if "thread_id" not in st.session_state:
+
+    st.session_state.thread_id = create_chat()
+
 
 if "messages" not in st.session_state:
 
     st.session_state.messages = []
 
 
-if "chat_history" not in st.session_state:
-
-    st.session_state.chat_history = []
-
-
-# --------------------------------------------------
+# ============================================================
 # NEW CHAT
-# --------------------------------------------------
+# ============================================================
 
 def new_chat():
 
-    if st.session_state.messages:
-
-        st.session_state.chat_history.append(
-            st.session_state.messages.copy()
-        )
-
+    # Clear current UI messages
     st.session_state.messages = []
 
+    # Create new SQLite chat + new thread
+    st.session_state.thread_id = create_chat()
 
-# --------------------------------------------------
+
+# ============================================================
+# LOAD EXISTING CHAT
+# ============================================================
+
+def load_chat(thread_id):
+
+    # Change current thread
+    st.session_state.thread_id = thread_id
+
+    # Load messages from SQLite
+    saved_messages = get_chat_messages(
+        thread_id
+    )
+
+    # Load them into Streamlit UI
+    st.session_state.messages = saved_messages
+
+
+# ============================================================
+# DELETE EXISTING CHAT
+# ============================================================
+
+def remove_chat(thread_id):
+
+    # Delete chat and its messages
+    delete_chat(
+        thread_id
+    )
+
+    # If currently opened chat was deleted
+    if thread_id == st.session_state.thread_id:
+
+        # Create a fresh chat
+        st.session_state.thread_id = create_chat()
+
+        # Clear UI messages
+        st.session_state.messages = []
+
+
+# ============================================================
 # SIDEBAR
-# --------------------------------------------------
+# ============================================================
 
 with st.sidebar:
 
@@ -145,25 +108,144 @@ with st.sidebar:
 
     st.divider()
 
+
+    # ========================================================
+    # NEW CHAT BUTTON
+    # ========================================================
+
     if st.button(
         "➕ New Chat",
         use_container_width=True
     ):
 
         new_chat()
+
         st.rerun()
+
 
     st.divider()
 
-    st.subheader("💬 Current Chat")
 
-    if not st.session_state.messages:
+    # ========================================================
+    # CHAT HISTORY
+    # ========================================================
 
-        st.caption("No messages yet.")
+    st.subheader("🗂️ Chat History")
+
+    chats = get_chats(
+        limit=20
+    )
+
+
+    if not chats:
+
+        st.caption(
+            "No previous chats."
+        )
 
     else:
 
-        for message in st.session_state.messages:
+        for chat in chats:
+
+            thread_id = chat["thread_id"]
+
+            chat_title = chat["title"]
+
+
+            if len(chat_title) > 30:
+
+                chat_title = (
+                    chat_title[:30]
+                    + "..."
+                )
+
+
+            # ------------------------------------------------
+            # Check current chat
+            # ------------------------------------------------
+
+            is_current_chat = (
+                thread_id
+                ==
+                st.session_state.thread_id
+            )
+
+
+            # ------------------------------------------------
+            # Chat + Delete buttons
+            # ------------------------------------------------
+
+            col1, col2 = st.columns(
+                [5, 1]
+            )
+
+
+            # ------------------------------------------------
+            # OPEN CHAT
+            # ------------------------------------------------
+
+            with col1:
+
+                button_label = (
+                    "🟢 "
+                    if is_current_chat
+                    else "💬 "
+                ) + chat_title
+
+
+                if st.button(
+                    button_label,
+                    key=f"chat_{thread_id}",
+                    use_container_width=True
+                ):
+
+                    load_chat(
+                        thread_id
+                    )
+
+                    st.rerun()
+
+
+            # ------------------------------------------------
+            # DELETE CHAT
+            # ------------------------------------------------
+
+            with col2:
+
+                if st.button(
+                    "🗑️",
+                    key=f"delete_{thread_id}",
+                    help="Delete this chat"
+                ):
+
+                    remove_chat(
+                        thread_id
+                    )
+
+                    st.rerun()
+
+
+    st.divider()
+
+
+    # ========================================================
+    # CURRENT CHAT
+    # ========================================================
+
+    st.subheader("💬 Current Chat")
+
+
+    if not st.session_state.messages:
+
+        st.caption(
+            "No messages yet."
+        )
+
+    else:
+
+        for message in (
+            st.session_state.messages
+        ):
 
             if message["role"] == "user":
 
@@ -172,26 +254,51 @@ with st.sidebar:
                     + message["content"][:40]
                 )
 
+
     st.divider()
+
+
+    # ========================================================
+    # THREAD ID
+    # ========================================================
+
+    st.subheader("🧵 Current Thread")
+
+    st.code(
+        st.session_state.thread_id
+    )
+
+
+    st.divider()
+
+
+    # ========================================================
+    # FEATURES
+    # ========================================================
 
     st.subheader("📚 Features")
 
     st.write("✅ AI Chatbot")
     st.write("✅ Conversation Memory")
     st.write("✅ RAG + FAISS")
+    st.write("✅ Multi-Company RAG")
     st.write("✅ Source Information")
-    st.write("⚡ Streaming Responses")
-    st.write("⏳ LangGraph")
+    st.write("⚡ LangGraph")
+    st.write("✅ Thread ID")
+    st.write("✅ SQLite Checkpoint")
+    st.write("✅ Persistent Chat History")
     st.write("⏳ Multi-Agent")
     st.write("⏳ HITL")
     st.write("⏳ MCP")
 
 
-# --------------------------------------------------
+# ============================================================
 # MAIN PAGE
-# --------------------------------------------------
+# ============================================================
 
-st.title("🤖 Placement AI Co-Pilot")
+st.title(
+    "🤖 Placement AI Co-Pilot"
+)
 
 st.caption(
     "Your AI companion for placements, DSA, interviews, "
@@ -199,41 +306,51 @@ st.caption(
 )
 
 
-# --------------------------------------------------
-# DISPLAY CHAT
-# --------------------------------------------------
+# ============================================================
+# DISPLAY CURRENT CHAT
+# ============================================================
 
 for message in st.session_state.messages:
 
-    with st.chat_message(message["role"]):
+    with st.chat_message(
+        message["role"]
+    ):
 
         st.markdown(
             message["content"]
         )
 
 
-# --------------------------------------------------
+# ============================================================
 # USER INPUT
-# --------------------------------------------------
+# ============================================================
 
 user_input = st.chat_input(
     "Ask me anything..."
 )
 
 
-# --------------------------------------------------
+# ============================================================
 # PROCESS QUESTION
-# --------------------------------------------------
+# ============================================================
 
 if user_input:
 
-    # ----------------------------------------------
+
+    # ========================================================
     # USER MESSAGE
-    # ----------------------------------------------
+    # ========================================================
 
     with st.chat_message("user"):
 
-        st.markdown(user_input)
+        st.markdown(
+            user_input
+        )
+
+
+    # ========================================================
+    # SAVE USER MESSAGE TO UI
+    # ========================================================
 
     st.session_state.messages.append(
         {
@@ -243,205 +360,136 @@ if user_input:
     )
 
 
-    # ----------------------------------------------
-    # COMPANY DETECTION
-    # ----------------------------------------------
+    # ========================================================
+    # SAVE USER MESSAGE TO SQLITE
+    # ========================================================
 
-    company = None
+    save_message(
+        st.session_state.thread_id,
+        "user",
+        user_input
+    )
 
-    company_keywords = {
-        "tcs": "tcs",
-        "infosys": "infosys",
-        "accenture": "accenture",
-        "capgemini": "capgemini",
-        "cognizant": "cognizant",
-        "wipro": "wipro",
-        "deloitte": "deloitte",
-        "hcl": "hcltech",
-        "hcltech": "hcltech",
-        "ltimindtree": "ltimindtree",
-        "tech mahindra": "techmahindra",
-        "techmahindra": "techmahindra"
+
+    # ========================================================
+    # LANGGRAPH STATE
+    # ========================================================
+
+    initial_state = {
+
+        "messages": [
+
+            HumanMessage(
+                content=user_input
+            )
+
+        ],
+
+        "question": user_input,
+
+        "company": "",
+
+        "question_type": "",
+
+        "context": "",
+
+        "sources": [],
+
+        "response": ""
     }
 
-    user_input_lower = user_input.lower()
 
-    for keyword, company_name in company_keywords.items():
+    # ========================================================
+    # LANGGRAPH CONFIG
+    # ========================================================
 
-        if keyword in user_input_lower:
+    config = {
 
-            company = company_name
-            break
+        "configurable": {
 
+            "thread_id":
+                st.session_state.thread_id
 
-    # ----------------------------------------------
-    # RETRIEVE DOCUMENTS
-    # ----------------------------------------------
+        }
 
-    # IMPORTANT:
-    # RAG is used ONLY for company-specific questions.
-    #
-    # General questions like:
-    # "What is Binary Search?"
-    # "Explain OOP"
-    # "What is DP?"
-    #
-    # will NOT search the company knowledge base.
-
-    if company:
-
-        relevant_docs = get_relevant_documents(
-            question=user_input,
-            company=company
-        )
-
-    else:
-
-        relevant_docs = []
+    }
 
 
-    # ----------------------------------------------
-    # BUILD CONTEXT
-    # ----------------------------------------------
-
-    context = build_context(
-        relevant_docs
-    )
-
-
-    # ----------------------------------------------
-    # BUILD CONVERSATION
-    # ----------------------------------------------
-
-    conversation = [
-
-        SystemMessage(
-            content=(
-                SYSTEM_PROMPT
-                + "\n\n"
-                + "================================\n"
-                + "KNOWLEDGE BASE CONTEXT\n"
-                + "================================\n"
-                + (
-                    context
-                    if context
-                    else
-                    "No relevant company-specific "
-                    "information was found in the "
-                    "knowledge base."
-                )
-            )
-        )
-    ]
-
-
-    # ----------------------------------------------
-    # PREVIOUS CONVERSATION
-    # ----------------------------------------------
-
-    for message in st.session_state.messages[:-1]:
-
-        if message["role"] == "user":
-
-            conversation.append(
-                HumanMessage(
-                    content=message["content"]
-                )
-            )
-
-        elif message["role"] == "assistant":
-
-            conversation.append(
-                AIMessage(
-                    content=message["content"]
-                )
-            )
-
-
-    # ----------------------------------------------
-    # CURRENT QUESTION
-    # ----------------------------------------------
-
-    conversation.append(
-        HumanMessage(
-            content=user_input
-        )
-    )
-
-
-    # ----------------------------------------------
-    # ASSISTANT RESPONSE
-    # ----------------------------------------------
+    # ========================================================
+    # RUN LANGGRAPH
+    # ========================================================
 
     with st.chat_message("assistant"):
 
         with st.spinner(
-            "🔎 Searching knowledge base..."
-            if company
-            else
-            "🤖 Thinking..."
+            "🤖 Placement AI is thinking..."
         ):
 
-            # --------------------------------------
-            # STREAMING RESPONSE
-            # --------------------------------------
-
-            def generate_response():
-
-                for chunk in llm.stream(
-                    conversation
-                ):
-
-                    if chunk.content:
-
-                        yield chunk.content
-
-
-            assistant_response = st.write_stream(
-                generate_response()
+            result = graph.invoke(
+                initial_state,
+                config=config
             )
 
 
-        # ------------------------------------------
-        # SOURCES
-        # ------------------------------------------
+        # ====================================================
+        # GET RESPONSE
+        # ====================================================
 
-        if relevant_docs:
+        assistant_response = result[
+            "response"
+        ]
+
+
+        # ====================================================
+        # DISPLAY RESPONSE
+        # ====================================================
+
+        st.markdown(
+            assistant_response
+        )
+
+
+        # ====================================================
+        # SOURCES
+        # ====================================================
+
+        sources = result.get(
+            "sources",
+            []
+        )
+
+
+        if sources:
 
             with st.expander(
                 "📚 Sources used"
             ):
 
-                for index, item in enumerate(
-                    relevant_docs,
+                for index, source in enumerate(
+                    sources,
                     start=1
                 ):
 
-                    doc = item["document"]
-
-                    score = item["score"]
-
-                    company_name = doc.metadata.get(
+                    company_name = source.get(
                         "company",
                         "Unknown"
                     )
 
-                    source = doc.metadata.get(
-                        "source",
-                        "Unknown source"
+                    source_file = source.get(
+                        "source_file",
+                        "Unknown"
                     )
 
-                    page = doc.metadata.get(
-                        "page_label",
-                        doc.metadata.get(
-                            "page",
-                            "Unknown"
-                        )
+                    page = source.get(
+                        "page",
+                        "Unknown"
                     )
 
-                    source_name = (
-                        source.split("\\")[-1]
+                    score = source.get(
+                        "score",
+                        0
                     )
+
 
                     st.markdown(
                         f"""
@@ -449,7 +497,7 @@ if user_input:
 
 🏢 **Company:** `{company_name}`
 
-📄 **Document:** `{source_name}`
+📄 **Document:** `{source_file}`
 
 📑 **Page:** `{page}`
 
@@ -458,13 +506,82 @@ if user_input:
                     )
 
 
-    # ----------------------------------------------
-    # SAVE RESPONSE
-    # ----------------------------------------------
+        # ====================================================
+        # LANGGRAPH EXECUTION
+        # ====================================================
+
+        with st.expander(
+            "🔎 LangGraph Execution"
+        ):
+
+            company = result.get(
+                "company",
+                ""
+            )
+
+            question_type = result.get(
+                "question_type",
+                ""
+            )
+
+            context = result.get(
+                "context",
+                ""
+            )
+
+
+            st.write(
+                "🧵 Thread ID:",
+                st.session_state.thread_id
+            )
+
+
+            st.write(
+                "🏢 Company:",
+                company
+                if company
+                else
+                "None"
+            )
+
+
+            st.write(
+                "📌 Question Type:",
+                question_type
+            )
+
+
+            if context:
+
+                st.write(
+                    "📚 RAG Context Retrieved: ✅"
+                )
+
+            else:
+
+                st.write(
+                    "📚 RAG Context Retrieved: ❌"
+                )
+
+
+    # ========================================================
+    # SAVE ASSISTANT MESSAGE TO UI
+    # ========================================================
 
     st.session_state.messages.append(
         {
             "role": "assistant",
             "content": assistant_response
         }
+    )
+
+
+    # ========================================================
+    # SAVE ASSISTANT MESSAGE TO SQLITE
+    # ========================================================
+
+    save_message(
+        st.session_state.thread_id,
+        "assistant",
+        assistant_response
     )

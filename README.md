@@ -1,3 +1,5 @@
+
+````markdown
 # 🤖 Placement AI Co-Pilot
 
 > An AI-powered placement preparation assistant evolving from a simple Gemini chatbot into an Agentic AI system.
@@ -13,7 +15,7 @@
 - Career Guidance
 - Computer Science Subjects
 
-The project is intentionally being developed incrementally to understand and implement modern AI application architecture such as **RAG, Vector Databases, LangGraph, Memory, Tool Calling, Agentic AI, Multi-Agent Workflows, Human-in-the-Loop, and MCP**.
+The project is intentionally being developed incrementally to understand and implement modern AI application architecture such as **RAG, Vector Databases, LangGraph, Persistent State, Memory, Tool Calling, Agentic AI, Multi-Agent Workflows, Human-in-the-Loop, and MCP**.
 
 ---
 
@@ -33,7 +35,11 @@ Multi-Company RAG
       │
       ▼
 Phase 4
-LangGraph + Persistent State
+LangGraph + SQLite Persistence
+      │
+      ▼
+Phase 5
+Long-Term Memory
       │
       ▼
 Tool Calling
@@ -52,7 +58,7 @@ MCP
       │
       ▼
 Deployment
-```
+````
 
 ---
 
@@ -64,32 +70,32 @@ Build the basic conversational AI layer for placement preparation.
 
 ## 🛠️ What Was Built
 
-- Streamlit chat interface
-- Google Gemini 2.5 Flash integration
-- Conversation context using Streamlit session state
-- New Chat functionality
-- Sidebar
-- Placement-focused system prompt
-- Streaming responses
+* Streamlit chat interface
+* Google Gemini 2.5 Flash integration
+* Conversation context using Streamlit session state
+* New Chat functionality
+* Sidebar
+* Placement-focused system prompt
+* Streaming responses
 
 ## 🏗️ Architecture
 
 ```text
 User
-  │
-  ▼
+ │
+ ▼
 Streamlit UI
-  │
-  ▼
+ │
+ ▼
 Conversation History
-  │
-  ▼
+ │
+ ▼
 Gemini 2.5 Flash
-  │
-  ▼
+ │
+ ▼
 AI Response
-  │
-  ▼
+ │
+ ▼
 Streamlit UI
 ```
 
@@ -97,13 +103,13 @@ Streamlit UI
 
 The chatbot can help with:
 
-- Data Structures & Algorithms
-- Programming
-- Technical Interviews
-- Placement Preparation
-- Resume Preparation
-- Career Guidance
-- Computer Science Subjects
+* Data Structures & Algorithms
+* Programming
+* Technical Interviews
+* Placement Preparation
+* Resume Preparation
+* Career Guidance
+* Computer Science Subjects
 
 ---
 
@@ -147,19 +153,19 @@ Final Answer
 
 ## 🛠️ What Was Built
 
-- PDF ingestion
-- PDF page loading
-- Recursive text splitting
-- HuggingFace embeddings
-- Sentence Transformer embeddings
-- FAISS vector database
-- Similarity-based retrieval
-- Relevance filtering
-- Source document information
-- Page information
-- Similarity scores
-- RAG-specific prompting rules
-- Streaming RAG responses
+* PDF ingestion
+* PDF page loading
+* Recursive text splitting
+* HuggingFace embeddings
+* Sentence Transformer embeddings
+* FAISS vector database
+* Similarity-based retrieval
+* Relevance filtering
+* Source document information
+* Page information
+* Similarity scores
+* RAG-specific prompting rules
+* Streaming RAG responses
 
 ## 💡 Example
 
@@ -215,7 +221,7 @@ More companies can be added later using the same structure.
 
 # 🔄 Multi-Company Ingestion
 
-The ingestion pipeline was upgraded from loading one fixed PDF to automatically scanning all PDFs inside the `documents/` directory.
+The ingestion pipeline automatically scans all PDFs inside the `documents/` directory.
 
 ```text
 documents/
@@ -261,7 +267,7 @@ This allows the system to perform company-specific retrieval.
 
 The retriever supports an optional company filter.
 
-For example:
+Example:
 
 ```text
 Question:
@@ -299,7 +305,7 @@ Future Companies
 
 # 🎯 Relevance Filtering
 
-The retriever uses FAISS similarity search and converts the returned distance into a simple normalized score:
+The retriever uses FAISS similarity search and converts the returned distance into a normalized score:
 
 ```python
 similarity_score = 1 / (1 + distance)
@@ -334,20 +340,18 @@ Flow:
 
 ```text
 User
-  │
-  ▼
+ │
+ ▼
 No Company Detected
-  │
-  ▼
+ │
+ ▼
 Gemini
-  │
-  ▼
+ │
+ ▼
 Answer
 ```
 
 Company documents are not unnecessarily retrieved.
-
----
 
 ## Company-Specific Question
 
@@ -361,23 +365,23 @@ Flow:
 
 ```text
 User
-  │
-  ▼
+ │
+ ▼
 Company Detection
-  │
-  ▼
+ │
+ ▼
 Infosys Filter
-  │
-  ▼
+ │
+ ▼
 FAISS Retrieval
-  │
-  ▼
+ │
+ ▼
 Relevant Context
-  │
-  ▼
+ │
+ ▼
 Gemini
-  │
-  ▼
+ │
+ ▼
 Answer + Sources
 ```
 
@@ -420,57 +424,315 @@ This makes the RAG pipeline more transparent and helps verify the retrieved cont
 
 ---
 
-# 🧩 Current Architecture
+# 🧠 Phase 4 — LangGraph + Persistent State
 
-This is the architecture actually implemented at the end of **Phase 3**.
+## 🎯 Goal
+
+Move the application from a direct Streamlit → Gemini flow to a **stateful graph-based workflow** using LangGraph.
+
+Phase 4 introduced:
+
+* LangGraph state
+* Nodes
+* Edges
+* Conditional routing
+* Thread IDs
+* Persistent conversation checkpoints
+* SQLite-backed LangGraph state
+* Persistent chat history
+* Chat switching
+* Chat deletion
+
+---
+
+# 🔄 LangGraph Workflow
+
+The current workflow is:
 
 ```text
-                         ┌──────────────┐
-                         │     USER     │
-                         └──────┬───────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   Streamlit UI   │
-                       └────────┬─────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │    User Query    │
-                       └────────┬─────────┘
-                                │
-                                ▼
-                     ┌───────────────────────┐
-                     │  Company Detection    │
-                     └──────────┬────────────┘
-                                │
-                  ┌─────────────┴─────────────┐
-                  │                           │
-                  ▼                           ▼
-            General Query              Company Query
-                  │                           │
-                  ▼                           ▼
-               Gemini                 Company Filter
-                                              │
-                                              ▼
-                                       FAISS Retriever
-                                              │
-                                              ▼
-                                       Relevant Chunks
-                                              │
-                                              ▼
-                                       Context Builder
-                                              │
-                  └───────────────────────────┘
-                                │
-                                ▼
-                       Gemini 2.5 Flash
-                                │
-                                ▼
-                       Streaming Response
-                                │
-                                ▼
-                          Streamlit UI
+User Query
+    │
+    ▼
+LangGraph State
+    │
+    ▼
+Question Classifier
+    │
+    ├───────────────┐
+    │               │
+    ▼               ▼
+General Query   Company Query
+    │               │
+    ▼               ▼
+General Node    Company/RAG Node
+    │               │
+    │               ▼
+    │          FAISS Retrieval
+    │               │
+    │               ▼
+    │          Relevant Context
+    │               │
+    └───────┬───────┘
+            ▼
+      Answer Generation
+            │
+            ▼
+       Gemini 2.5 Flash
+            │
+            ▼
+        Final Response
+```
+
+---
+
+# 🧩 LangGraph State
+
+The graph maintains a shared state containing:
+
+```python
+class PlacementState(TypedDict):
+    messages: Annotated[list, add_messages]
+    question: str
+    company: str
+    question_type: str
+    context: str
+    sources: list
+    response: str
+```
+
+This allows different nodes to work with the same workflow state.
+
+---
+
+# 🔀 Conditional Routing
+
+The graph separates general questions from company-specific questions.
+
+```text
+                  User Question
+                       │
+                       ▼
+                 Classifier
+                  /       \
+                 /         \
+                ▼           ▼
+           General       Company
+              │             │
+              ▼             ▼
+           Gemini          RAG
+              │             │
+              └──────┬──────┘
+                     ▼
+               Answer Node
+```
+
+This keeps the graph modular and makes it easier to add tools and agents later.
+
+---
+
+# 🧵 Thread-Based Conversation Memory
+
+Each chat receives a unique `thread_id`.
+
+Example:
+
+```text
+Chat 1
+thread_id = abc
+     │
+     ├── User: My name is Satya
+     └── User: What is my name?
+             ↓
+          Satya
+```
+
+A new chat gets a different thread:
+
+```text
+Chat 2
+thread_id = xyz
+     │
+     └── Separate conversation state
+```
+
+This provides **conversation-level memory isolation**.
+
+> Note: This is thread-level conversation memory. Cross-chat long-term user memory is planned for a later phase.
+
+---
+
+# 🗄️ SQLite Persistence
+
+Phase 4 replaced temporary in-memory LangGraph checkpointing with a SQLite-backed checkpointer.
+
+```text
+LangGraph
+    │
+    ▼
+SqliteSaver
+    │
+    ▼
+database/langgraph_checkpoints.db
+```
+
+This allows LangGraph checkpoints to persist across application restarts.
+
+The project also maintains a separate SQLite database for application-level chat history:
+
+```text
+database/
+├── chat_history.db
+└── langgraph_checkpoints.db
+```
+
+These databases have different responsibilities:
+
+| Database                   | Purpose                                                  |
+| -------------------------- | -------------------------------------------------------- |
+| `chat_history.db`          | Chat list, titles, messages, chat switching and deletion |
+| `langgraph_checkpoints.db` | LangGraph workflow state/checkpoints                     |
+
+Database files are intentionally ignored by Git and are not committed to the repository.
+
+---
+
+# 💬 Persistent Chat History
+
+The application now supports:
+
+* New Chat
+* Previous Chat History
+* Opening an existing chat
+* Persistent messages
+* Automatic chat titles
+* Chat deletion
+* Unique thread IDs
+
+Example:
+
+```text
+Sidebar
+│
+├── New Chat
+│
+├── Chat History
+│   ├── Chat 1     🗑️
+│   ├── Chat 2     🗑️
+│   └── Chat 3     🗑️
+│
+└── Current Thread ID
+```
+
+Deleting a chat removes its application-level chat record and messages from `chat_history.db`.
+
+---
+
+# 🧪 Phase 4 Testing
+
+### Same-thread memory
+
+```text
+User: My name is Satya.
+
+User: What is my name?
+
+AI: Satya
+```
+
+### Thread isolation
+
+```text
+Chat 1:
+My name is Satya.
+        ↓
+New Chat
+        ↓
+What is my name?
+
+→ The new chat has a separate conversation thread.
+```
+
+### Persistent state
+
+LangGraph checkpoints are stored in:
+
+```text
+database/langgraph_checkpoints.db
+```
+
+### Chat history
+
+Application-level messages are stored in:
+
+```text
+database/chat_history.db
+```
+
+### Delete
+
+A chat can be deleted directly from the sidebar.
+
+---
+
+# 🏗️ Current Architecture
+
+The architecture after **Phase 4** is now:
+
+```text
+                         ┌──────────────────┐
+                         │       USER       │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │   Streamlit UI   │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │    Chat DB       │
+                         │   chat_history   │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │    LangGraph     │
+                         │     State        │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │     Router       │
+                         └────────┬─────────┘
+                                  │
+                     ┌────────────┴────────────┐
+                     │                         │
+                     ▼                         ▼
+              General Query              Company Query
+                     │                         │
+                     ▼                         ▼
+                  Gemini                  FAISS RAG
+                                               │
+                                               ▼
+                                      Relevant Context
+                                               │
+                     ┌─────────────────────────┘
+                     ▼
+                Answer Generation
+                     │
+                     ▼
+              Gemini 2.5 Flash
+                     │
+                     ▼
+               Final Response
+
+LangGraph State
+      │
+      ▼
+SqliteSaver
+      │
+      ▼
+langgraph_checkpoints.db
 ```
 
 ---
@@ -553,7 +815,20 @@ Tell me the syllabus of Capgemini.
 What is Binary Search?
 ```
 
-The application distinguishes between general questions and company-specific RAG queries.
+## LangGraph Memory
+
+```text
+Chat 1:
+My name is Satya.
+
+Chat 1:
+What is my name?
+→ Satya
+
+New Chat:
+What is my name?
+→ Separate thread; long-term cross-chat memory is not implemented yet.
+```
 
 ---
 
@@ -563,10 +838,15 @@ The application distinguishes between general questions and company-specific RAG
 placement-ai-copilot/
 │
 ├── app.py
+├── chat_db.py
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
 ├── .env
+│
+├── database/
+│   ├── chat_history.db
+│   └── langgraph_checkpoints.db
 │
 ├── documents/
 │   ├── tcs/
@@ -580,6 +860,10 @@ placement-ai-copilot/
 │   │
 │   └── accenture/
 │
+├── langgraph/
+│   ├── basic_graph.py
+│   └── placement_graph.py
+│
 ├── rag/
 │   ├── ingest.py
 │   ├── retriever.py
@@ -589,21 +873,26 @@ placement-ai-copilot/
     └── placement_faiss/
 ```
 
+> `.env`, SQLite databases, the Python virtual environment, FAISS vectorstore, and other local/generated files are excluded from Git according to `.gitignore`.
+
 ---
 
 # 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Programming Language | Python |
-| LLM | Google Gemini 2.5 Flash |
-| UI | Streamlit |
-| Framework | LangChain |
-| PDF Loader | PyPDFLoader |
-| Text Splitter | RecursiveCharacterTextSplitter |
-| Embeddings | HuggingFace / Sentence Transformers |
-| Vector Database | FAISS |
-| Version Control | Git & GitHub |
+| Layer                | Technology                          |
+| -------------------- | ----------------------------------- |
+| Programming Language | Python                              |
+| LLM                  | Google Gemini 2.5 Flash             |
+| UI                   | Streamlit                           |
+| LLM/RAG Framework    | LangChain                           |
+| Graph Framework      | LangGraph                           |
+| Checkpointing        | LangGraph SQLite Checkpointer       |
+| Database             | SQLite                              |
+| PDF Loader           | PyPDFLoader                         |
+| Text Splitter        | RecursiveCharacterTextSplitter      |
+| Embeddings           | HuggingFace / Sentence Transformers |
+| Vector Database      | FAISS                               |
+| Version Control      | Git & GitHub                        |
 
 ---
 
@@ -683,20 +972,32 @@ Example:
 
 ```text
 Ask a question:
+
 What is the academic eligibility criteria for Infosys?
 
 Company filter:
+
 infosys
 ```
 
 The retriever displays:
 
-- Retrieved chunks
-- Company
-- Source document
-- Page
-- Similarity score
-- Metadata
+* Retrieved chunks
+* Company
+* Source document
+* Page
+* Similarity score
+* Metadata
+
+---
+
+# 🧠 Test LangGraph Import
+
+To verify that the graph loads without executing a Gemini request:
+
+```powershell
+python -c "from langgraph.placement_graph import graph; print('LangGraph loaded successfully')"
+```
 
 ---
 
@@ -718,59 +1019,47 @@ The project will continue evolving through the following phases.
 
 ---
 
-## Phase 4 — LangGraph
+## ✅ Phase 4 — LangGraph + Persistent State
 
-**Next Major Phase**
+**Completed**
 
-Planned concepts:
+Implemented:
 
-- Graph-based workflows
-- State
-- Nodes
-- Edges
-- Conditional Edges
-- Query Routing
-- Thread IDs
-- Checkpointing
-- Persistent Conversation State
-
-Expected architecture:
-
-```text
-User
- ↓
-LangGraph
- ↓
-State
- ↓
-Nodes
- ↓
-Conditional Routing
- ↓
-RAG / LLM / Tools
- ↓
-Final Response
-```
+* Graph-based workflows
+* Typed state
+* Nodes
+* Edges
+* Conditional routing
+* Query classification
+* Thread IDs
+* LangGraph checkpointing
+* SQLite-backed checkpoint persistence
+* Persistent chat history
+* Chat switching
+* Chat deletion
 
 ---
 
-## Phase 5 — Persistent Memory
+## 🚧 Phase 5 — Long-Term Memory
+
+**Next**
 
 Planned:
 
-- SQLite / SQL chat storage
-- Persistent chat history
-- Conversation threads
-- Long-term user memory
-- User-specific information
+* Cross-chat user memory
+* User profile memory
+* Memory extraction
+* Memory retrieval
+* SQLite-based long-term memory
+* Selective memory storage
 
-Example:
+Example target behavior:
 
 ```text
 Chat 1
 User: My name is Satya.
         ↓
-Persistent Memory
+Long-Term Memory
         ↓
 Chat 2
 User: What is my name?
@@ -778,17 +1067,19 @@ User: What is my name?
 AI: Your name is Satya.
 ```
 
+> Phase 4 currently provides thread-level conversation memory. Cross-chat long-term memory is a separate upcoming feature.
+
 ---
 
 ## Phase 6 — Tool Calling
 
 Potential tools:
 
-- Web Search
-- Placement Information Tools
-- Resume Utilities
-- Coding Utilities
-- External APIs
+* Web Search
+* Placement Information Tools
+* Resume Utilities
+* Coding Utilities
+* External APIs
 
 ---
 
@@ -818,15 +1109,15 @@ Final Response
 Potential specialized agents:
 
 ```text
-                 Placement AI
-                      │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-    DSA Agent      RAG Agent    Resume Agent
-        │             │             │
-        └─────────────┼─────────────┘
-                      ▼
-                Final Response
+                  Placement AI
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+      DSA Agent     RAG Agent    Resume Agent
+          │            │            │
+          └────────────┼────────────┘
+                       ▼
+                 Final Response
 ```
 
 ---
@@ -857,32 +1148,31 @@ The long-term goal is to evolve Placement AI Co-Pilot into a complete **Agentic 
                            USER
                              │
                              ▼
-                    Placement AI
-                      Co-Pilot
+                    Placement AI Co-Pilot
                              │
                              ▼
                          LangGraph
                              │
-             ┌───────────────┼───────────────┐
-             ▼               ▼               ▼
-          Memory            RAG             Tools
-             │               │               │
-             ▼               ▼               ▼
-           SQL DB        FAISS KB       External APIs
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+           Memory           RAG            Tools
+              │              │              │
+              ▼              ▼              ▼
+           SQL DB        FAISS KB      External APIs
                              │
                              ▼
-                    Company Knowledge
-                    /      |       \
-                  TCS   Infosys   Capgemini
+                     Company Knowledge
+                       /      |       \
+                     TCS   Infosys   Capgemini
                              │
                              ▼
                      Agentic Workflow
                              │
-                   ┌─────────┴─────────┐
-                   ▼                   ▼
-               AI Agents             HITL
-                   │                   │
-                   └─────────┬─────────┘
+                  ┌──────────┴──────────┐
+                  ▼                     ▼
+              AI Agents               HITL
+                  │                     │
+                  └──────────┬──────────┘
                              ▼
                             MCP
                              │
@@ -894,19 +1184,19 @@ The long-term goal is to evolve Placement AI Co-Pilot into a complete **Agentic 
 
 # 📌 Development Status
 
-| Phase | Status |
-|---|---|
-| Phase 1 — Gemini Chatbot | ✅ Completed |
-| Phase 2 — RAG + FAISS | ✅ Completed |
-| Phase 3 — Multi-Company RAG | ✅ Completed |
-| Phase 4 — LangGraph | 🔜 Next |
-| Phase 5 — Persistent Memory | 🔜 Planned |
-| Phase 6 — Tool Calling | 🔜 Planned |
-| Phase 7 — Agentic AI | 🔜 Planned |
-| Phase 8 — Multi-Agent System | 🔜 Planned |
-| Phase 9 — Human-in-the-Loop | 🔜 Planned |
-| Phase 10 — MCP | 🔜 Planned |
-| Phase 11 — Deployment | 🔜 Planned |
+| Phase                                  | Status      |
+| -------------------------------------- | ----------- |
+| Phase 1 — Gemini Chatbot               | ✅ Completed |
+| Phase 2 — RAG + FAISS                  | ✅ Completed |
+| Phase 3 — Multi-Company RAG            | ✅ Completed |
+| Phase 4 — LangGraph + Persistent State | ✅ Completed |
+| Phase 5 — Long-Term Memory             | 🚧 Next     |
+| Phase 6 — Tool Calling                 | 🔜 Planned  |
+| Phase 7 — Agentic AI                   | 🔜 Planned  |
+| Phase 8 — Multi-Agent System           | 🔜 Planned  |
+| Phase 9 — Human-in-the-Loop            | 🔜 Planned  |
+| Phase 10 — MCP                         | 🔜 Planned  |
+| Phase 11 — Deployment                  | 🔜 Planned  |
 
 ---
 
@@ -918,7 +1208,7 @@ B.Tech — Computer Science & Engineering
 
 GitHub:
 
-https://github.com/satya-anand-ml/placement-ai-copilot
+[https://github.com/satya-anand-ml/placement-ai-copilot](https://github.com/satya-anand-ml/placement-ai-copilot)
 
 ---
 
@@ -928,4 +1218,7 @@ https://github.com/satya-anand-ml/placement-ai-copilot
 
 This project is continuously evolving from a:
 
-**Basic GenAI Chatbot → RAG System → Multi-Company Knowledge Assistant → LangGraph Workflow → Agentic AI System**
+**Basic GenAI Chatbot → RAG System → Multi-Company Knowledge Assistant → LangGraph Workflow → Persistent AI Assistant → Agentic AI System**
+
+```
+```
